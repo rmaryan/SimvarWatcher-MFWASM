@@ -1,0 +1,239 @@
+﻿<Window x:Class="Simvars.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Simvars"
+        xmlns:simco="clr-namespace:Microsoft.FlightSimulator.SimConnect;assembly=Microsoft.FlightSimulator.SimConnect"
+        xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        mc:Ignorable="d"
+        Title="Simvar Watcher" Height="700" Width="800" MinWidth="800" MinHeight="700">
+
+    <Window.Resources>
+        <ObjectDataProvider x:Key="SimObjectTypeFromEnum" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="simco:SIMCONNECT_SIMOBJECT_TYPE"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+        <CollectionViewSource x:Key="AlphaSortedSimvarNames" Source="{Binding aSimvarNamesFiltered}">
+            <CollectionViewSource.SortDescriptions>
+                <scm:SortDescription />
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
+        <CollectionViewSource x:Key="AlphaSortedUnitNames" Source="{Binding aUnitNamesFiltered}">
+            <CollectionViewSource.SortDescriptions>
+                <scm:SortDescription />
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Load file" Command="{Binding cmdLoadFiles}"/>
+                <MenuItem Header="_Save file" Command="{Binding cmdSaveFile}"/>
+                <MenuItem Header="_Save file with values" Command="{Binding cmdSaveFileWithValues}" />
+                <MenuItem Header="_Exit" Click="clickClose"  />
+            </MenuItem>
+            <MenuItem Header="_Options">
+                <MenuItem Header="_Use FSX-compatible configuration" IsCheckable="True" IsChecked="{Binding bFSXcompatible, Mode=TwoWay}" />
+                <MenuItem Header="_Show all units" IsCheckable="True" IsChecked="{Binding bShowAllUnits, Mode=TwoWay}" Click="ShowAllUnits_CheckBox_Changed"/>
+            </MenuItem>
+            <MenuItem Header="_About">
+                <MenuItem Header="_SimConnect Reference" Click="openSimConnectReferenceLink" />
+                <MenuItem Header="_Simulation Variables Reference" Click="openSimulationVariablesReference"/>
+            </MenuItem>
+        </Menu>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="250"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="5"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="10"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Column="1" Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="48"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="23"/>
+                    <RowDefinition Height="5"/>
+                    <RowDefinition Height="23"/>
+                    <RowDefinition Height="5"/>
+                    <RowDefinition Height="23"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="25"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="25"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="0.5*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" x:Name="btn_Connection" Content="{Binding sConnectButtonLabel}" Command="{Binding cmdToggleConnect}" />
+
+                    <Label Grid.Column="2" Content="Frequency" HorizontalAlignment="Center" VerticalAlignment="Top" Height="25"/>
+                    <Slider Grid.Column="2" Margin="0 25 0 0" x:Name="sl_Tick" 
+                            Value="1000" Minimum="100" Maximum="3000" LargeChange="100" SmallChange="10"
+                            HorizontalAlignment="Center" VerticalAlignment="Top" Width="63" IsDirectionReversed="True" 
+                            Thumb.DragCompleted="Slider_DragCompleted" Thumb.DragStarted="Slider_DragStarted" ValueChanged="Slider_ValueChanged"/>
+
+                    <Ellipse Grid.Column="1" Height="14" Stroke="Black" Width="14">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding bConnected}" Value="false">
+                                        <Setter Property="Fill" Value="#FFFF5030" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding bConnected}" Value="true">
+                                        <Setter Property="Fill" Value="#FF50FF30" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding bOddTick}" Value="true">
+                                        <!-- Assume bOddTick is true only when bConnected is true-->
+                                        <Setter Property="Fill" Value="#FF45E2F4" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                </Grid>
+
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Label Content="SimObject" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="1" x:Name="cbb_SimObjectType" ItemsSource="{Binding Source={StaticResource SimObjectTypeFromEnum}}" SelectedValue="{Binding eSimObjectType, Mode=OneWayToSource}" SelectedIndex="0" />
+                    <Label Grid.Column="2" Content="ObjectID" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="2" Grid.Row="1" x:Name="cbb_ObjectIds" ItemsSource="{Binding lObjectIDs}" SelectedValue="{Binding iObjectIdRequest, Mode=OneWayToSource}" IsEnabled="{Binding bObjectIDSelectionEnabled}" SelectedIndex="0" />
+                </Grid>
+
+                <Label Grid.Row="4" Content="Simvar Name" HorizontalAlignment="Left" />
+                <TextBox Grid.Row="6" x:Name="tb_SearchBar"  SelectionChanged="TextBox_SearchBar_SelectionChanged"/>
+                <ComboBox Grid.Row="8" x:Name="cbb_SimvarNames" ItemsSource="{Binding Source={StaticResource AlphaSortedSimvarNames}}" SelectedValue="{Binding sSimvarRequest, Mode=OneWayToSource}" SelectedIndex="0" SelectionChanged="ComboBox_SimvarNames_SelectionChanged"/>
+
+                <Grid Grid.Row="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Label Content="Index" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <ComboBox Grid.Row="1" x:Name="cbb_Indices" ItemsSource="{Binding aIndices}" SelectedValue="{Binding iIndexRequest, Mode=OneWayToSource}" SelectedIndex="0" />
+                    <Label Grid.Column="2" Content="Units" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <ComboBox Grid.Column="2" Grid.Row="1" x:Name="cbb_UnitNames" ItemsSource="{Binding Source={StaticResource AlphaSortedUnitNames}}" SelectedValue="{Binding sUnitRequest, Mode=OneWayToSource}" SelectedIndex="0"  Loaded="ComboBox_UnitNames_Loaded"/>
+                </Grid>
+
+                <Grid Grid.Row="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <CheckBox Grid.Row="17" Content="Is String" IsChecked="{Binding bIsString, Mode=TwoWay}" VerticalAlignment="Center"/>
+                    <Button Grid.Row="17" Grid.Column="2" x:Name="btn_Request" Content="Add request &gt;" Command="{Binding cmdAddRequest}"/>
+                </Grid>
+
+
+                <Grid Grid.Row="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Label Content="Value" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <TextBox Grid.Column="0" Grid.Row="1" x:Name="tb_SetValue" PreviewTextInput="NumberValidationTextBox" Text="{Binding sSetValue, Mode=OneWayToSource}"  TextWrapping="Wrap" />
+                    <Button Grid.Column="2" Grid.Row="1" x:Name="btn_TrySetValue" Content="Try set value &gt;" Command="{Binding cmdTrySetValue}" IsEnabled="{Binding bConnected}" />
+                </Grid>
+
+                <Label Grid.Row="16" Content="Errors" />
+
+                <ListBox Grid.Row="17" ItemsSource="{Binding lErrorMessages}">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Foreground" Value="Red"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel VerticalAlignment="Bottom"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                </ListBox>
+            </Grid>
+
+
+            <Grid Grid.Column="3" Grid.Row="1">
+                <ListView x:Name="lv_Simvars" SelectionMode="Single" ItemsSource="{Binding lSimvarRequests}" SelectedItem="{Binding oSelectedSimvarRequest, Mode=OneWayToSource}" >
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding bStillPending}" Value="True">
+                                    <Setter Property="Background" Value="#55D3D373" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Remove" Command="{Binding cmdRemoveSelectedRequest}" />
+                            <MenuItem Header="Remove All" Command="{Binding cmdRemoveAllRequests}" />
+                            <Separator />
+                            <MenuItem Header="Copy name" Command="{Binding cmdCopyNameSelectedRequest}" />
+                            <MenuItem Header="Copy value" Command="{Binding cmdCopyValueSelectedRequest}" />
+                            <MenuItem Header="Copy unit" Command="{Binding cmdCopyUnitSelectedRequest}" />
+                        </ContextMenu>
+                    </ListView.ContextMenu>
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Simvar" Width="200" DisplayMemberBinding="{Binding sName}"/>
+                            <GridViewColumn Header="Value" Width="150" DisplayMemberBinding="{Binding sValue}"/>
+                            <GridViewColumn Header="Units" Width="150" DisplayMemberBinding="{Binding sUnits}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
