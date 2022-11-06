@@ -139,7 +139,7 @@
                 </Grid>
 
                 <Label Grid.Row="4" Content="Simvar Name" HorizontalAlignment="Left" />
-                <TextBox Grid.Row="6" x:Name="tb_SearchBar"  SelectionChanged="TextBox_SearchBar_SelectionChanged"/>
+                <TextBox Grid.Row="6" x:Name="tb_SearchBar" Text="{Binding sSearchValue, Mode=OneWayToSource}" SelectionChanged="TextBox_SearchBar_SelectionChanged"/>
                 <ComboBox Grid.Row="8" x:Name="cbb_SimvarNames" ItemsSource="{Binding Source={StaticResource AlphaSortedSimvarNames}}" SelectedValue="{Binding sSimvarRequest, Mode=OneWayToSource}" SelectedIndex="0" SelectionChanged="ComboBox_SimvarNames_SelectionChanged"/>
 
                 <Grid Grid.Row="10">
@@ -183,7 +183,7 @@
                     </Grid.RowDefinitions>
 
                     <Label Content="Value" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <TextBox Grid.Column="0" Grid.Row="1" x:Name="tb_SetValue" PreviewTextInput="NumberValidationTextBox" Text="{Binding sSetValue, Mode=OneWayToSource}"  TextWrapping="Wrap" />
+                    <TextBox Grid.Column="0" Grid.Row="1" x:Name="tb_SetValue" Text="{Binding sSetValue, Mode=OneWayToSource}"  TextWrapping="Wrap" />
                     <Button Grid.Column="2" Grid.Row="1" x:Name="btn_TrySetValue" Content="Try set value &gt;" Command="{Binding cmdTrySetValue}" IsEnabled="{Binding bConnected}" />
                 </Grid>
 

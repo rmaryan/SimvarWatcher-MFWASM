@@ -8,7 +8,7 @@ using System.Windows.Threading;
 using System.Diagnostics;
 
 using Microsoft.FlightSimulator.SimConnect;
-
+using MSFSConnector;
 
 namespace Simvars
 {
@@ -72,6 +72,7 @@ namespace Simvars
         }
         private bool m_bStillPending = false;
 
+        public bool bWASMVar = false;
     };
 
     public class SimvarsViewModel : BaseViewModel, IBaseSimConnectWrapper
@@ -86,6 +87,14 @@ namespace Simvars
 
         /// SimConnect object
         private SimConnect m_oSimConnect = null;
+
+        /// WASM module connection definitions
+        private const string WASM_CLIENT_NAME = "SimVarsWatcher";
+        private const string WASM_CLIENT_DATA_NAME_SIMVAR = WASM_CLIENT_NAME + ".LVars";
+        private const string WASM_CLIENT_DATA_NAME_COMMAND = WASM_CLIENT_NAME + ".Command";
+        private const string WASM_CLIENT_DATA_NAME_RESPONSE = WASM_CLIENT_NAME + ".Response";
+        public bool bConnectedWASM { get; private set; } = false;
+        private uint m_iCurrentWASMRequest = 10;
 
         public bool bConnected
         {
@@ -128,6 +137,7 @@ namespace Simvars
 
             sConnectButtonLabel = "Connect";
             bConnected = false;
+            bConnectedWASM = false;
 
             // Set all requests as pending
             foreach (SimvarRequest oSimvarRequest in lSimvarRequests)
@@ -202,6 +212,13 @@ namespace Simvars
             set { this.SetProperty(ref m_sSimvarRequest, value); }
         }
         private string m_sSimvarRequest = null;
+
+        public string sSearchValue
+        {
+            get { return m_sSearchValue; }
+            set { this.SetProperty(ref m_sSearchValue, value); }
+        }
+        private string m_sSearchValue = null;
 
         public string[] aUnitNames
         {
@@ -375,6 +392,10 @@ namespace Simvars
 
                 /// Catch a simobject data request
                 m_oSimConnect.OnRecvSimobjectDataBytype += new SimConnect.RecvSimobjectDataBytypeEventHandler(SimConnect_OnRecvSimobjectDataBytype);
+
+                // WASM data will be received by this handler
+                m_oSimConnect.OnRecvClientData += new SimConnect.RecvClientDataEventHandler(SimConnect_OnGotWASMData);
+
             }
             catch (COMException ex)
             {
@@ -390,10 +411,14 @@ namespace Simvars
             sConnectButtonLabel = "Disconnect";
             bConnected = true;
 
+
+            // Kick-off the WASM module
+            WasmModuleClient.AddClient(sender, WASM_CLIENT_NAME);
+
             // Register pending requests
             foreach (SimvarRequest oSimvarRequest in lSimvarRequests)
             {
-                if (oSimvarRequest.bPending)
+                if (oSimvarRequest.bPending && !oSimvarRequest.bWASMVar)
                 {
                     oSimvarRequest.bPending = !RegisterToSimConnect(oSimvarRequest);
                     oSimvarRequest.bStillPending = oSimvarRequest.bPending;
@@ -455,6 +480,93 @@ namespace Simvars
             }
         }
 
+        /// WASM module messages handler
+        private void SimConnect_OnGotWASMData(SimConnect sender, SIMCONNECT_RECV_CLIENT_DATA data)
+        {
+            Console.WriteLine("SimConnect_OnGotWASMData");
+
+            Debug.WriteLine($"WASM GOT: {data.dwRequestID}");
+
+            if (data.dwRequestID == (uint)SIMCONNECT_CLIENT_DATA_ID.MOBIFLIGHT_RESPONSE)
+            {
+                // this is a message from the main channel
+                // we expect here only client adding confirmation
+                var simData = (WASMResponseString)(data.dwData[0]);
+
+                if (simData.Data == "MF.Clients.Add." + WASM_CLIENT_NAME + ".Finished")
+                {
+                    Console.WriteLine("WASM Module Connected");
+                    bConnectedWASM = true;
+
+                    // map the custom communication channels
+                    (sender).MapClientDataNameToID(WASM_CLIENT_DATA_NAME_SIMVAR, SIMCONNECT_CLIENT_DATA_ID.CLIENT_LVARS);
+                    (sender).MapClientDataNameToID(WASM_CLIENT_DATA_NAME_COMMAND, SIMCONNECT_CLIENT_DATA_ID.CLIENT_CMD);
+                    (sender).MapClientDataNameToID(WASM_CLIENT_DATA_NAME_RESPONSE, SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE);
+
+                    (sender).AddToClientDataDefinition(SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE, 0, WasmModuleClient.MOBIFLIGHT_MESSAGE_SIZE, 0, 0);
+                    (sender).RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, WASMResponseString>(SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE);
+                    (sender).RequestClientData(
+                        SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE,
+                        SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE,
+                        SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE,
+                        SIMCONNECT_CLIENT_DATA_PERIOD.ON_SET,
+                        SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+                        0,
+                        0,
+                        0
+                    );
+
+                    WasmModuleClient.SetConfig(sender, "MAX_VARS_PER_FRAME", "30");
+
+                    // Register pending WASM requests
+                    foreach (SimvarRequest oSimvarRequest in lSimvarRequests)
+                    {
+                        if (oSimvarRequest.bPending && oSimvarRequest.bWASMVar)
+                        {
+                            oSimvarRequest.bPending = !RegisterToSimConnect(oSimvarRequest);
+                            oSimvarRequest.bStillPending = oSimvarRequest.bPending;
+                        }
+                    }
+
+                }
+                else
+                {
+                    Console.WriteLine($"Received WASM MBF RESPONSE: {simData.Data}");
+                }
+            }
+            else
+            if (data.dwRequestID == (uint)SIMCONNECT_CLIENT_DATA_ID.CLIENT_RESPONSE)
+            {
+                // handling the client-specific messages goes here
+                var simData = (WASMResponseString)(data.dwData[0]);
+                Console.WriteLine($"Received WASM CLIENT RESPONSE: {simData.Data}");
+            }
+            else
+            {
+                // regular variable change notifications
+                var simData = (WASMClientDataValue)(data.dwData[0]);
+
+                uint iRequest = data.dwRequestID;
+                uint iObject = data.dwObjectID;
+                if (!lObjectIDs.Contains(iObject))
+                {
+                    lObjectIDs.Add(iObject);
+                }
+                foreach (SimvarRequest oSimvarRequest in lSimvarRequests)
+                {
+                    Debug.WriteLine($"VAR: {(uint)oSimvarRequest.eDef}={oSimvarRequest.sName}");
+                    if (oSimvarRequest.bWASMVar && (iRequest == (uint)oSimvarRequest.eDef) && (!bObjectIDSelectionEnabled || iObject == m_iObjectIdRequest))
+                    {
+                        double dValue = simData.data;
+                        oSimvarRequest.dValue = dValue;
+                        oSimvarRequest.sValue = dValue.ToString("F9");
+                        oSimvarRequest.bPending = false;
+                        oSimvarRequest.bStillPending = false;
+                    }
+                }
+            }
+        }
+
         // May not be the best way to achive regular requests.
         // See SimConnect.RequestDataOnSimObject
         private void OnTick(object sender, EventArgs e)
@@ -465,14 +577,17 @@ namespace Simvars
 
             foreach (SimvarRequest oSimvarRequest in lSimvarRequests)
             {
-                if (!oSimvarRequest.bPending)
+                if (!oSimvarRequest.bWASMVar)
                 {
-                    m_oSimConnect?.RequestDataOnSimObjectType(oSimvarRequest.eRequest, oSimvarRequest.eDef, 0, m_eSimObjectType);
-                    oSimvarRequest.bPending = true;
-                }
-                else
-                {
-                    oSimvarRequest.bStillPending = true;
+                    if (!oSimvarRequest.bPending)
+                    {
+                        m_oSimConnect?.RequestDataOnSimObjectType(oSimvarRequest.eRequest, oSimvarRequest.eDef, 0, m_eSimObjectType);
+                        oSimvarRequest.bPending = true;
+                    }
+                    else
+                    {
+                        oSimvarRequest.bStillPending = true;
+                    }
                 }
             }
         }
@@ -522,11 +637,44 @@ namespace Simvars
                 }
                 else
                 {
-                    /// Define a data structure containing numerical value
-                    m_oSimConnect.AddToDataDefinition(_oSimvarRequest.eDef, _oSimvarRequest.sName, _oSimvarRequest.sUnits, SIMCONNECT_DATATYPE.FLOAT64, 0.0f, SimConnect.SIMCONNECT_UNUSED);
-                    /// IMPORTANT: Register it with the simconnect managed wrapper marshaller
-                    /// If you skip this step, you will only receive a uint in the .dwData field.
-                    m_oSimConnect.RegisterDataDefineStruct<double>(_oSimvarRequest.eDef);
+                    if (_oSimvarRequest.bWASMVar)
+                    {
+                        Debug.WriteLine("REGISTERING WASM");
+                        Debug.WriteLine(_oSimvarRequest.sName);
+                        Debug.WriteLine(_oSimvarRequest.eDef);
+                        Debug.WriteLine(_oSimvarRequest.eRequest);
+                        Debug.WriteLine(m_iCurrentWASMRequest);
+
+                        m_oSimConnect.AddToClientDataDefinition(
+                            _oSimvarRequest.eDef,
+                            (uint)(m_iCurrentWASMRequest * sizeof(float)),
+                            sizeof(float),
+                            0,
+                            0);
+
+                        m_oSimConnect.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, WASMClientDataValue>(_oSimvarRequest.eDef);
+
+                        m_oSimConnect.RequestClientData(
+                            SIMCONNECT_CLIENT_DATA_ID.CLIENT_LVARS,
+                            _oSimvarRequest.eDef,
+                            _oSimvarRequest.eDef,
+                            SIMCONNECT_CLIENT_DATA_PERIOD.ON_SET,
+                            SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+                            0,
+                            0,
+                            0
+                        );
+                        WasmModuleClient.SendWasmCmd(m_oSimConnect, "MF.SimVars.Add." + _oSimvarRequest.sName);
+                        ++m_iCurrentWASMRequest;
+                    }
+                    else
+                    {
+                        /// Define a data structure containing numerical value
+                        m_oSimConnect.AddToDataDefinition(_oSimvarRequest.eDef, _oSimvarRequest.sName, _oSimvarRequest.sUnits, SIMCONNECT_DATATYPE.FLOAT64, 0.0f, SimConnect.SIMCONNECT_UNUSED);
+                        /// IMPORTANT: Register it with the simconnect managed wrapper marshaller
+                        /// If you skip this step, you will only receive a uint in the .dwData field.
+                        m_oSimConnect.RegisterDataDefineStruct<double>(_oSimvarRequest.eDef);
+                    }
                 }
 
                 return true;
@@ -541,16 +689,47 @@ namespace Simvars
         {
             Console.WriteLine("AddRequest");
 
+            // the variable is not necessarily listed in the combo box check if it is happen to be a WASM spec
+            if(_sNewSimvarRequest == null)
+            {
+                if (m_sSearchValue.StartsWith("("))
+                {
+                    _sNewSimvarRequest = m_sSearchValue;
+                }
+                else
+                {
+                    // no need to register empty request
+                    return;
+                }
+            }
+
             //string sNewSimvarRequest = _sOverrideSimvarRequest != null ? _sOverrideSimvarRequest : ((m_iIndexRequest == 0) ? m_sSimvarRequest : (m_sSimvarRequest + ":" + m_iIndexRequest));
             //string sNewUnitRequest = _sOverrideUnitRequest != null ? _sOverrideUnitRequest : m_sUnitRequest;
-            SimvarRequest oSimvarRequest = new SimvarRequest
+            SimvarRequest oSimvarRequest = null;
+            if (_sNewSimvarRequest.StartsWith("("))
             {
-                eDef = (DEFINITION)m_iCurrentDefinition,
-                eRequest = (REQUEST)m_iCurrentRequest,
-                sName = _sNewSimvarRequest,
-                bIsString = _bIsString,
-                sUnits = _bIsString ? null : _sNewUnitRequest
-            };
+                oSimvarRequest = new SimvarRequest
+                {
+                    eDef = (DEFINITION)m_iCurrentWASMRequest,
+                    eRequest = (REQUEST)m_iCurrentWASMRequest,
+                    sName = _sNewSimvarRequest,
+                    bIsString = false,
+                    sUnits = "",
+                    bWASMVar = true
+                };
+            }
+            else
+            {
+                oSimvarRequest = new SimvarRequest
+                {
+                    eDef = (DEFINITION)m_iCurrentDefinition,
+                    eRequest = (REQUEST)m_iCurrentRequest,
+                    sName = _sNewSimvarRequest,
+                    bIsString = _bIsString,
+                    sUnits = _bIsString ? null : _sNewUnitRequest,
+                    bWASMVar = false
+                };
+            }
 
             oSimvarRequest.bPending = !RegisterToSimConnect(oSimvarRequest);
             oSimvarRequest.bStillPending = oSimvarRequest.bPending;
@@ -595,23 +774,46 @@ namespace Simvars
         private void TrySetValue()
         {
             Console.WriteLine("TrySetValue");
-            if (m_oSelectedSimvarRequest != null && m_sSetValue != null)
+            if (m_sSetValue.StartsWith("("))
             {
-                if (!m_oSelectedSimvarRequest.bIsString)
+                // assume this is the executable WASM command
+                if (!bConnectedWASM)
                 {
-                    double dValue = 0.0;
-                    if (double.TryParse(m_sSetValue, NumberStyles.Any, null, out dValue))
-                    {
-                        m_oSimConnect.SetDataOnSimObject(m_oSelectedSimvarRequest.eDef, SimConnect.SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_DATA_SET_FLAG.DEFAULT, dValue);
-                    }
+                    lErrorMessages.Add("WASM module is not available");
+                    return;
                 }
-                else
+                Console.WriteLine($"Executing WASM code: {m_sSetValue}");
+                WasmModuleClient.WASMExecute(m_oSimConnect, m_sSetValue.Substring(1));
+            }
+            else
+            {
+                if (m_oSelectedSimvarRequest != null && m_sSetValue != null)
                 {
-                    Struct1 sValueStruct = new Struct1()
+                    if (!m_oSelectedSimvarRequest.bIsString)
                     {
-                        sValue = m_sSetValue
-                    };
-                    m_oSimConnect.SetDataOnSimObject(m_oSelectedSimvarRequest.eDef, SimConnect.SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_DATA_SET_FLAG.DEFAULT, sValueStruct);
+                        double dValue = 0.0;
+                        if (double.TryParse(m_sSetValue, NumberStyles.Any, null, out dValue))
+                        {
+                            if (m_oSelectedSimvarRequest.bWASMVar)
+                            {
+                                string simVarCode = $"{m_sSetValue} (>{m_oSelectedSimvarRequest.sName.Substring(1)}";
+                                Console.WriteLine($"Executing WASM code: {simVarCode}");
+                                WasmModuleClient.WASMExecute(m_oSimConnect, simVarCode);
+                            }
+                            else
+                            {
+                                m_oSimConnect.SetDataOnSimObject(m_oSelectedSimvarRequest.eDef, SimConnect.SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_DATA_SET_FLAG.DEFAULT, dValue);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Struct1 sValueStruct = new Struct1()
+                        {
+                            sValue = m_sSetValue
+                        };
+                        m_oSimConnect.SetDataOnSimObject(m_oSelectedSimvarRequest.eDef, SimConnect.SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_DATA_SET_FLAG.DEFAULT, sValueStruct);
+                    }
                 }
             }
         }
