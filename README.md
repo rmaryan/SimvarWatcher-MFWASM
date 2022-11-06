@@ -18,4 +18,6 @@ As a back-side effect - you can execute ANY sim command [execute_calculator_code
 
 This project is also a good help to those who would like to integrate the MobiFlight WASM module into their code. Check the [initial GIT change](https://github.com/rmaryan/SimvarWatcher-MFWASM/commit/e1314ec85a7cacd502e943eddd968f4a7a1e6754#diff-3bbf026e9c34377cf4c7cbefd3c1d07da0237a714d9e8ba79beb973f993624c0) for an easy to easy-to-follow view.
 
+Those who don't like to build the app on their own can download a ready to use executable here: [release_binary.zip](Release/release_binary.zip).
+
 ![Main Window](main_window.png)
