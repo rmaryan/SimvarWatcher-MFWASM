@@ -81,7 +81,7 @@
                     <RowDefinition Height="10"/>
                     <RowDefinition Height="25"/>
                     <RowDefinition Height="10"/>
-                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="150"/>
                     <RowDefinition Height="10"/>
                     <RowDefinition Height="25"/>
                     <RowDefinition Height="*"/>
@@ -173,18 +173,18 @@
 
                 <Grid Grid.Row="14">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3*"/>
-                        <ColumnDefinition Width="20"/>
-                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="30"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition Height="30"/>
                     </Grid.RowDefinitions>
 
                     <Label Content="Value" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                     <TextBox Grid.Column="0" Grid.Row="1" x:Name="tb_SetValue" Text="{Binding sSetValue, Mode=OneWayToSource}"  TextWrapping="Wrap" />
-                    <Button Grid.Column="2" Grid.Row="1" x:Name="btn_TrySetValue" Content="Try set value &gt;" Command="{Binding cmdTrySetValue}" IsEnabled="{Binding bConnected}" />
+                    <Button Grid.Column="0" Grid.Row="3" x:Name="btn_TrySetValue" Content="Execute/Try set value &gt;" Command="{Binding cmdTrySetValue}" IsEnabled="{Binding bConnected}" />
                 </Grid>
 
                 <Label Grid.Row="16" Content="Errors" />

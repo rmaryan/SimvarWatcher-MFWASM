@@ -94,7 +94,8 @@ namespace Simvars
         private const string WASM_CLIENT_DATA_NAME_COMMAND = WASM_CLIENT_NAME + ".Command";
         private const string WASM_CLIENT_DATA_NAME_RESPONSE = WASM_CLIENT_NAME + ".Response";
         public bool bConnectedWASM { get; private set; } = false;
-        private uint m_iCurrentWASMRequest = 10;
+        private const uint WASM_STARTING_LVAR_REQUEST_ID = 10;
+        private uint m_iCurrentWASMRequest = WASM_STARTING_LVAR_REQUEST_ID;
 
         public bool bConnected
         {
@@ -130,6 +131,10 @@ namespace Simvars
 
             if (m_oSimConnect != null)
             {
+                if (bConnectedWASM)
+                {
+                    WasmModuleClient.Stop(m_oSimConnect);
+                }
                 /// Dispose serves the same purpose as SimConnect_Close()
                 m_oSimConnect.Dispose();
                 m_oSimConnect = null;
@@ -517,6 +522,8 @@ namespace Simvars
                     );
 
                     WasmModuleClient.SetConfig(sender, "MAX_VARS_PER_FRAME", "30");
+                    
+                    WasmModuleClient.Stop(sender);
 
                     // Register pending WASM requests
                     foreach (SimvarRequest oSimvarRequest in lSimvarRequests)
@@ -647,7 +654,7 @@ namespace Simvars
 
                         m_oSimConnect.AddToClientDataDefinition(
                             _oSimvarRequest.eDef,
-                            (uint)(m_iCurrentWASMRequest * sizeof(float)),
+                            (uint)(((uint)_oSimvarRequest.eDef - WASM_STARTING_LVAR_REQUEST_ID) * sizeof(float)),
                             sizeof(float),
                             0,
                             0);
@@ -665,7 +672,6 @@ namespace Simvars
                             0
                         );
                         WasmModuleClient.SendWasmCmd(m_oSimConnect, "MF.SimVars.Add." + _oSimvarRequest.sName);
-                        ++m_iCurrentWASMRequest;
                     }
                     else
                     {
@@ -736,8 +742,15 @@ namespace Simvars
 
             lSimvarRequests.Add(oSimvarRequest);
 
-            ++m_iCurrentDefinition;
-            ++m_iCurrentRequest;
+            if(oSimvarRequest.bWASMVar)
+            {
+                ++m_iCurrentWASMRequest;
+            }
+            else
+            {
+                ++m_iCurrentDefinition;
+                ++m_iCurrentRequest;
+            }
         }
 
         private void RemoveSelectedRequest()
