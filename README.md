@@ -21,3 +21,7 @@ This project is also a good help to those who would like to integrate the MobiFl
 Those who don't like to build the app on their own can download a ready to use executable here: [release_binary.zip](Release/release_binary.zip).
 
 ![Main Window](main_window.png)
+
+# Liked some of my work?
+
+<a href="https://www.buymeacoffee.com/maryanR" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
